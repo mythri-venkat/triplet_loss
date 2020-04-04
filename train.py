@@ -86,6 +86,28 @@ parser.add_argument(
     help='What margin to use: a float value for hard-margin, "soft" for '
          'soft-margin, or no margin if "none".')
 
+
+parser.add_argument(
+    '--flip_augment', action='store_true', default=False,
+    help='When this flag is provided, flip augmentation is performed.')
+
+parser.add_argument(
+    '--crop_augment', action='store_true', default=False,
+    help='When this flag is provided, crop augmentation is performed. Based on'
+         'The `crop_height` and `crop_width` parameters. Changing this flag '
+         'thus likely changes the network input size!')
+
+
+parser.add_argument(
+    '--pre_crop_height', default=288, type=common.positive_int,
+    help='Height used to resize a loaded image. This is ignored when no crop '
+         'augmentation is applied.')
+
+parser.add_argument(
+    '--pre_crop_width', default=144, type=common.positive_int,
+    help='Width used to resize a loaded image. This is ignored when no crop '
+         'augmentation is applied.')
+
 def show_all_parameters( args):
     print('Training using the following parameters:')
     for key, value in sorted(vars(args).items()):
@@ -152,10 +174,19 @@ def main():
 
     # Convert filenames to actual image tensors.
     net_input_size = (args.net_input_height, args.net_input_width)
+    pre_crop_size = (args.pre_crop_height, args.pre_crop_width)
     dataset = dataset.map(lambda fid, pid: common.fid_to_image(
                           fid, pid, image_root=args.image_root,
-                          image_size=net_input_size)
+                          image_size=pre_crop_size if args.crop_augment else net_input_size)
                           )
+    
+    if args.flip_augment:
+        dataset = dataset.map(
+            lambda im, fid, pid: (tf.image.random_flip_left_right(im), fid, pid))
+    if args.crop_augment:
+        dataset = dataset.map(
+            lambda im, fid, pid: (tf.image.random_crop(im, net_input_size + (3,)), fid, pid))
+
 
     # Group the data into PK batches.
     batch_size = args.batch_p * args.batch_k
